@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}Register — VisionOCR{% endblock %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+  <div class="col-md-4">
+    <div class="text-center mb-4">
+      <div style="font-size:2.5rem;">✍️</div>
+      <h3 style="background:linear-gradient(135deg,#7C3AED,#4F46E5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:700;">VisionOCR</h3>
+      <p class="text-muted">Create your account</p>
+    </div>
+    <div class="card p-4">
+      <form method="POST">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Full Name</label>
+          <input type="text" name="name" class="form-control" required autofocus>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Email</label>
+          <input type="email" name="email" class="form-control" required>
+        </div>
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Password</label>
+          <input type="password" name="password" class="form-control" required minlength="6">
+        </div>
+        <button class="btn btn-primary w-100 py-2">Create Account</button>
+      </form>
+      <p class="text-center mt-3 mb-0" style="font-size:.88rem;color:#6B7280;">
+        Already registered? <a href="{{ url_for('auth.login') }}">Sign in</a>
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

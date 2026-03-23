@@ -1,0 +1,248 @@
+{% extends 'base.html' %}
+{% block title %}Analyze Image — VisionOCR{% endblock %}
+{% block extra_css %}
+<style>
+  .drop-zone{border:2px dashed #C4B5FD;border-radius:14px;background:#FAF5FF;
+             padding:36px 20px;text-align:center;cursor:pointer;transition:.2s;}
+  .drop-zone.over{background:#EDE9FE;border-color:#7C3AED;}
+  #preview{max-height:300px;border-radius:10px;object-fit:contain;width:100%;}
+  .result-section{background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;
+                  padding:16px;font-size:.88rem;line-height:1.7;white-space:pre-wrap;
+                  font-family:'Segoe UI',sans-serif;min-height:80px;}
+  .section-label{font-size:.7rem;font-weight:700;text-transform:uppercase;
+                 letter-spacing:.6px;color:#7C3AED;margin-bottom:6px;}
+  .lang-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px;}
+  .lang-btn{padding:6px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;
+            cursor:pointer;font-size:.78rem;text-align:center;transition:.15s;}
+  .lang-btn:hover,.lang-btn.selected{background:#EDE9FE;border-color:#7C3AED;color:#5B21B6;}
+  .spinner-border{width:1.1rem;height:1.1rem;}
+  .tab-btn{padding:8px 18px;border-radius:8px;border:1px solid #E5E7EB;background:#fff;
+           font-size:.85rem;cursor:pointer;transition:.15s;}
+  .tab-btn.active{background:#7C3AED;color:#fff;border-color:#7C3AED;}
+</style>
+{% endblock %}
+{% block content %}
+
+<h4 class="mb-1">Analyze Image</h4>
+<p class="text-muted mb-4">Upload any handwritten or typed document — VisionOCR extracts, summarizes, and translates</p>
+
+<div class="row g-4">
+
+  <!-- Left: Upload + Options -->
+  <div class="col-lg-5">
+    <div class="card p-4">
+      <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <div style="font-size:2rem;">📷</div>
+        <p class="fw-semibold mb-1 mt-2">Click or drag image here</p>
+        <p class="text-muted mb-0" style="font-size:.8rem;">JPG, PNG, WEBP, BMP supported</p>
+      </div>
+      <input type="file" id="file-input" accept="image/*" class="d-none">
+      <img id="preview" class="mt-3 d-none">
+
+      <!-- Translation option -->
+      <div class="mt-3">
+        <label class="form-label fw-semibold" style="font-size:.88rem;">
+          Translate to <span class="text-muted fw-normal">(optional)</span>
+        </label>
+        <div class="lang-grid">
+          {% for lang in ['Hindi','Spanish','French','German','Arabic','Chinese','Japanese','Telugu','Tamil','Bengali','Odia','Portuguese'] %}
+          <div class="lang-btn" onclick="selectLang(this,'{{ lang }}')">{{ lang }}</div>
+          {% endfor %}
+        </div>
+        <input type="text" id="custom-lang" class="form-control form-control-sm mt-2"
+               placeholder="Or type any language...">
+      </div>
+
+      <input type="hidden" id="translate-to" value="">
+      <div id="lang-selected" style="font-size:.78rem;color:#7C3AED;margin-top:6px;font-weight:500;"></div>
+      <button type="button" onclick="clearLang()" id="clear-lang-btn"
+              style="display:none;font-size:.75rem;color:#888;background:none;border:none;cursor:pointer;padding:0;">
+        Clear selection
+      </button>
+
+      <button id="analyze-btn" class="btn btn-primary mt-4 w-100 py-2">
+        <span id="btn-text"><i class="bi bi-magic"></i> Analyze with AI Vision</span>
+        <span id="btn-spin" class="d-none">
+          <span class="spinner-border spinner-border-sm me-2"></span>Analyzing...
+        </span>
+      </button>
+      <p class="text-center mt-2 mb-0 text-muted" style="font-size:.75rem;">
+        Uses Vision Language Models (VLMs) · Results saved automatically
+      </p>
+    </div>
+  </div>
+
+  <!-- Right: Results -->
+  <div class="col-lg-7">
+
+    <!-- Placeholder -->
+    <div id="placeholder" class="card p-5 text-center text-muted h-100 d-flex flex-column align-items-center justify-content-center">
+      <div style="font-size:3rem;opacity:.3;">🔍</div>
+      <p class="mt-3 mb-0">Results will appear here after analysis</p>
+    </div>
+
+    <!-- Results card (hidden until analysis) -->
+    <div id="results-card" class="card d-none">
+      <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+          <span id="doc-type-badge" class="badge-type me-2"></span>
+          <span id="meta-info" class="text-muted" style="font-size:.78rem;"></span>
+        </div>
+        <div class="d-flex gap-2" id="download-btns"></div>
+      </div>
+
+      <div class="card-body p-4">
+        <!-- Tabs -->
+        <div class="d-flex gap-2 mb-3 flex-wrap" id="tab-bar">
+          <button class="tab-btn active" onclick="showTab('extracted',this)">Extracted Text</button>
+          <button class="tab-btn" onclick="showTab('summary',this)">Summary</button>
+          <button class="tab-btn" id="trans-tab-btn" onclick="showTab('translation',this)" style="display:none">Translation</button>
+        </div>
+
+        <!-- Extracted text tab -->
+        <div id="tab-extracted">
+          <div class="section-label">Full Extracted Text</div>
+          <div class="result-section" id="extracted-box"></div>
+          <button class="btn btn-sm btn-outline-secondary mt-2" onclick="copyText('extracted-box')">
+            <i class="bi bi-clipboard"></i> Copy text
+          </button>
+        </div>
+
+        <!-- Summary tab -->
+        <div id="tab-summary" class="d-none">
+          <div class="section-label">AI Summary</div>
+          <div class="result-section" id="summary-box"></div>
+        </div>
+
+        <!-- Translation tab -->
+        <div id="tab-translation" class="d-none">
+          <div class="section-label" id="trans-label">Translation</div>
+          <div class="result-section" id="translation-box"></div>
+          <button class="btn btn-sm btn-outline-secondary mt-2" onclick="copyText('translation-box')">
+            <i class="bi bi-clipboard"></i> Copy translation
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentId = null;
+
+// ── Drag & drop ──────────────────────────────
+const dz = document.getElementById('drop-zone');
+const fi = document.getElementById('file-input');
+const pr = document.getElementById('preview');
+
+dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', ()  => dz.classList.remove('over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('over');
+  if (e.dataTransfer.files[0]) { fi.files = e.dataTransfer.files; showPreview(e.dataTransfer.files[0]); }
+});
+fi.addEventListener('change', () => { if (fi.files[0]) showPreview(fi.files[0]); });
+
+function showPreview(file) {
+  const reader = new FileReader();
+  reader.onload = e => { pr.src = e.target.result; pr.classList.remove('d-none'); };
+  reader.readAsDataURL(file);
+}
+
+// ── Language selection ───────────────────────
+function selectLang(el, lang) {
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('translate-to').value = lang;
+  document.getElementById('custom-lang').value = '';
+  document.getElementById('lang-selected').textContent = 'Selected: ' + lang;
+  document.getElementById('clear-lang-btn').style.display = 'inline';
+}
+document.getElementById('custom-lang').addEventListener('input', function() {
+  const val = this.value.trim();
+  document.getElementById('translate-to').value = val;
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('lang-selected').textContent = val ? 'Selected: ' + val : '';
+});
+
+// ── Analyze ──────────────────────────────────
+document.getElementById('analyze-btn').addEventListener('click', async () => {
+  if (!fi.files[0]) { alert('Please select an image first.'); return; }
+
+  document.getElementById('btn-text').classList.add('d-none');
+  document.getElementById('btn-spin').classList.remove('d-none');
+  document.getElementById('analyze-btn').disabled = true;
+  document.getElementById('placeholder').classList.remove('d-none');
+  document.getElementById('results-card').classList.add('d-none');
+
+  const form = new FormData();
+  form.append('image', fi.files[0]);
+  form.append('translate_to', document.getElementById('translate-to').value);
+
+  try {
+    const resp = await fetch('/api/analyze', { method:'POST', body:form });
+    const data = await resp.json();
+
+    if (data.error) {
+      document.getElementById('placeholder').innerHTML =
+        `<div style="color:#DC2626;font-size:.88rem;text-align:left;width:100%;">
+          <strong>Error:</strong> ${data.error}</div>`;
+      return;
+    }
+
+    currentId = data.id;
+    document.getElementById('placeholder').classList.add('d-none');
+    document.getElementById('results-card').classList.remove('d-none');
+
+    // Populate
+    document.getElementById('doc-type-badge').textContent = data.doc_type || 'Document';
+    document.getElementById('meta-info').textContent =
+      `${data.word_count} words · ${data.char_count} chars · ${data.tokens_used} tokens`;
+    document.getElementById('extracted-box').textContent  = data.extracted;
+    document.getElementById('summary-box').textContent    = data.summary;
+
+    // Translation tab
+    if (data.translation) {
+      document.getElementById('translation-box').textContent = data.translation;
+      document.getElementById('trans-label').textContent = `Translation (${data.translate_to})`;
+      document.getElementById('trans-tab-btn').style.display = '';
+    }
+
+    // Download buttons
+    document.getElementById('download-btns').innerHTML = `
+      <a href="/api/pdf/${data.id}" class="btn btn-sm btn-outline-primary">
+        <i class="bi bi-file-earmark-pdf"></i> PDF</a>
+      <a href="/api/txt/${data.id}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-file-text"></i> TXT</a>`;
+
+  } catch(e) {
+    document.getElementById('placeholder').innerHTML =
+      `<div style="color:#DC2626;font-size:.88rem;">Error: ${e.message}<br>
+       <small>Check VS Code terminal for details.</small></div>`;
+  } finally {
+    document.getElementById('btn-text').classList.remove('d-none');
+    document.getElementById('btn-spin').classList.add('d-none');
+    document.getElementById('analyze-btn').disabled = false;
+  }
+});
+
+// ── Tabs ─────────────────────────────────────
+function showTab(name, btn) {
+  ['extracted','summary','translation'].forEach(t => {
+    document.getElementById('tab-'+t).classList.add('d-none');
+  });
+  document.getElementById('tab-'+name).classList.remove('d-none');
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ── Copy ─────────────────────────────────────
+function copyText(id) {
+  navigator.clipboard.writeText(document.getElementById(id).textContent)
+    .then(() => alert('Copied to clipboard!'));
+}
+</script>
+{% endblock %}

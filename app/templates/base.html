@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}VisionOCR{% endblock %}</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+  :root{--accent:#7C3AED;--accent-l:#EDE9FE;--accent-d:#5B21B6;}
+  body{background:#F8F7FF;font-family:'Segoe UI',sans-serif;min-height:100vh;}
+  .sidebar{width:220px;min-height:100vh;background:#fff;border-right:1px solid #E5E7EB;
+           position:fixed;top:0;left:0;z-index:100;}
+  .logo{padding:24px 20px 12px;font-size:1.15rem;font-weight:700;
+        background:linear-gradient(135deg,#7C3AED,#4F46E5);
+        -webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+  .nav-link{color:#374151;border-radius:8px;margin:2px 10px;
+            padding:10px 14px;display:flex;align-items:center;gap:10px;font-size:.9rem;}
+  .nav-link:hover,.nav-link.active{background:var(--accent-l);color:var(--accent);}
+  .main{margin-left:220px;padding:32px;}
+  .card{border:1px solid #E5E7EB;border-radius:14px;box-shadow:none;background:#fff;}
+  .card-header{background:#fff;border-bottom:1px solid #E5E7EB;
+               border-radius:14px 14px 0 0!important;font-weight:600;padding:14px 20px;}
+  .btn-primary{background:var(--accent);border-color:var(--accent);}
+  .btn-primary:hover{background:var(--accent-d);border-color:var(--accent-d);}
+  .badge-type{background:#EDE9FE;color:#5B21B6;font-weight:500;border-radius:6px;padding:3px 10px;}
+  .flash-wrap{position:fixed;top:18px;right:18px;z-index:9999;min-width:260px;}
+  @media(max-width:768px){.sidebar{display:none}.main{margin-left:0;padding:16px}}
+</style>
+{% block extra_css %}{% endblock %}
+</head>
+<body>
+
+{% if current_user.is_authenticated %}
+<div class="sidebar d-flex flex-column">
+  <div class="logo">✍️ VisionOCR</div>
+  <nav class="mt-2 flex-grow-1">
+    <a href="{{ url_for('main.home') }}" class="nav-link {% if request.endpoint=='main.home' %}active{% endif %}">
+      <i class="bi bi-house"></i>Home</a>
+    <a href="{{ url_for('extract.upload_page') }}" class="nav-link {% if request.endpoint=='extract.upload_page' %}active{% endif %}">
+      <i class="bi bi-camera"></i>Analyze Image</a>
+    <a href="{{ url_for('history.history') }}" class="nav-link {% if request.endpoint=='history.history' %}active{% endif %}">
+      <i class="bi bi-clock-history"></i>History</a>
+    <hr class="mx-3 my-2">
+    <a href="{{ url_for('auth.logout') }}" class="nav-link text-danger">
+      <i class="bi bi-box-arrow-right"></i>Logout</a>
+  </nav>
+  <div class="px-4 pb-4" style="font-size:.75rem;color:#9CA3AF;">
+    Signed in as<br><strong style="color:#374151;">{{ current_user.name }}</strong>
+  </div>
+</div>
+{% endif %}
+
+<div class="{% if current_user.is_authenticated %}main{% else %}container{% endif %}">
+  <div class="flash-wrap">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat,msg in messages %}
+      <div class="alert alert-{{ 'success' if cat=='success' else 'danger' }} alert-dismissible fade show shadow-sm">
+        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+      {% endfor %}
+    {% endwith %}
+  </div>
+  {% block content %}{% endblock %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

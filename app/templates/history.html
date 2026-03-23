@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}History — VisionOCR{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div><h4 class="mb-0">History</h4><p class="text-muted mb-0">All your analyzed documents</p></div>
+  <form class="d-flex gap-2">
+    <input type="text" name="doc_type" value="{{ doc_filter }}" placeholder="Filter by type..."
+           class="form-control form-control-sm" style="width:160px;">
+    <button class="btn btn-sm btn-outline-secondary">Filter</button>
+  </form>
+</div>
+
+{% if results.items %}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr><th>#</th><th>File</th><th>Type</th><th>Summary</th><th>Words</th><th>Translated</th><th>Date</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for r in results.items %}
+        <tr>
+          <td class="text-muted" style="font-size:.78rem;">{{ r.id }}</td>
+          <td style="font-size:.78rem;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ r.filename }}</td>
+          <td><span class="badge-type">{{ r.doc_type or '—' }}</span></td>
+          <td style="font-size:.8rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6B7280;">
+            {{ r.summary[:70] if r.summary else '—' }}{% if r.summary and r.summary|length > 70 %}…{% endif %}
+          </td>
+          <td>{{ r.word_count }}</td>
+          <td style="font-size:.78rem;">{{ r.translate_to or '—' }}</td>
+          <td style="font-size:.78rem;color:#9CA3AF;">{{ r.created_at.strftime('%d %b %Y') }}</td>
+          <td class="d-flex gap-1">
+            <a href="{{ url_for('history.view_result', result_id=r.id) }}" class="btn btn-sm btn-outline-secondary">View</a>
+            <a href="{{ url_for('extract.download_pdf', result_id=r.id) }}" class="btn btn-sm btn-outline-primary">PDF</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<nav class="mt-3">
+  <ul class="pagination justify-content-center">
+    {% for p in results.iter_pages() %}
+      {% if p %}
+      <li class="page-item {% if p==results.page %}active{% endif %}">
+        <a class="page-link" href="?page={{ p }}&doc_type={{ doc_filter }}">{{ p }}</a>
+      </li>
+      {% else %}
+      <li class="page-item disabled"><span class="page-link">…</span></li>
+      {% endif %}
+    {% endfor %}
+  </ul>
+</nav>
+{% else %}
+<div class="card p-5 text-center text-muted">
+  <div style="font-size:3rem;opacity:.3;">📂</div>
+  <p class="mt-3">No documents yet. <a href="{{ url_for('extract.upload_page') }}">Analyze your first image</a>.</p>
+</div>
+{% endif %}
+{% endblock %}

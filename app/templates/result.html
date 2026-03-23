@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block title %}Result #{{ r.id }} — VisionOCR{% endblock %}
+{% block extra_css %}
+<style>
+  .result-box{background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;
+              padding:16px;font-size:.88rem;line-height:1.7;white-space:pre-wrap;}
+  .section-label{font-size:.7rem;font-weight:700;text-transform:uppercase;
+                 letter-spacing:.6px;color:#7C3AED;margin-bottom:6px;}
+  .tab-btn{padding:8px 18px;border-radius:8px;border:1px solid #E5E7EB;background:#fff;
+           font-size:.85rem;cursor:pointer;}
+  .tab-btn.active{background:#7C3AED;color:#fff;border-color:#7C3AED;}
+</style>
+{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+  <a href="{{ url_for('history.history') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i> Back</a>
+  <div>
+    <h5 class="mb-0">{{ r.doc_type or 'Document' }}
+      <span class="badge-type ms-2">{{ r.doc_type }}</span>
+    </h5>
+    <div class="text-muted" style="font-size:.78rem;">
+      {{ r.created_at.strftime('%d %B %Y at %H:%M') }} ·
+      {{ r.word_count }} words · {{ r.char_count }} chars · {{ r.tokens_used }} tokens used
+    </div>
+  </div>
+  <div class="ms-auto d-flex gap-2">
+    <a href="{{ url_for('extract.download_pdf', result_id=r.id) }}" class="btn btn-sm btn-outline-primary">
+      <i class="bi bi-file-earmark-pdf"></i> PDF</a>
+    <a href="{{ url_for('extract.download_txt', result_id=r.id) }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-file-text"></i> TXT</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="d-flex gap-2 flex-wrap">
+      <button class="tab-btn active" onclick="showTab('extracted',this)">Extracted Text</button>
+      <button class="tab-btn" onclick="showTab('summary',this)">Summary</button>
+      {% if r.translation %}
+      <button class="tab-btn" onclick="showTab('translation',this)">Translation ({{ r.translate_to }})</button>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card-body p-4">
+
+    <div id="tab-extracted">
+      <div class="section-label">Full Extracted Text</div>
+      <div class="result-box">{{ r.extracted }}</div>
+      <button class="btn btn-sm btn-outline-secondary mt-2"
+              onclick="navigator.clipboard.writeText(document.querySelector('#tab-extracted .result-box').textContent);alert('Copied!')">
+        <i class="bi bi-clipboard"></i> Copy
+      </button>
+    </div>
+
+    <div id="tab-summary" class="d-none">
+      <div class="section-label">AI Summary</div>
+      <div class="result-box">{{ r.summary or 'No summary available.' }}</div>
+    </div>
+
+    {% if r.translation %}
+    <div id="tab-translation" class="d-none">
+      <div class="section-label">Translation — {{ r.translate_to }}</div>
+      <div class="result-box">{{ r.translation }}</div>
+      <button class="btn btn-sm btn-outline-secondary mt-2"
+              onclick="navigator.clipboard.writeText(document.querySelector('#tab-translation .result-box').textContent);alert('Copied!')">
+        <i class="bi bi-clipboard"></i> Copy translation
+      </button>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function showTab(name, btn) {
+  ['extracted','summary','translation'].forEach(t => {
+    const el = document.getElementById('tab-'+t);
+    if (el) el.classList.add('d-none');
+  });
+  const target = document.getElementById('tab-'+name);
+  if (target) target.classList.remove('d-none');
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+</script>
+{% endblock %}

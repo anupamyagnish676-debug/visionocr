@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}Home — VisionOCR{% endblock %}
+{% block content %}
+<h4 class="mb-1">Welcome back, {{ current_user.name }} 👋</h4>
+<p class="text-muted mb-4">Handwriting and document analysis using Vision Language Models</p>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card p-3 text-center">
+      <div style="font-size:2rem;font-weight:700;color:#7C3AED;">{{ total }}</div>
+      <div class="text-muted" style="font-size:.82rem;">Documents analyzed</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3 text-center">
+      <div style="font-size:2rem;font-weight:700;color:#059669;">{{ total_words }}</div>
+      <div class="text-muted" style="font-size:.82rem;">Total words extracted</div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card p-3 h-100 d-flex flex-row align-items-center gap-3">
+      <div style="font-size:2rem;">🤖</div>
+      <div>
+        <div class="fw-semibold" style="font-size:.9rem;">Powered by VLM</div>
+        <div class="text-muted" style="font-size:.78rem;">Extracts text · Detects document type · Summarizes · Translates</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-4" style="border:2px dashed #C4B5FD;background:#FAF5FF;">
+  <div class="card-body text-center py-4">
+    <div style="font-size:2.5rem;">📸</div>
+    <h5 class="mt-2 fw-semibold">Upload a handwritten or typed image</h5>
+    <p class="text-muted mb-3" style="font-size:.9rem;">
+      VisionOCR reads the full page accurately — cursive, print, mixed handwriting
+    </p>
+    <a href="{{ url_for('extract.upload_page') }}" class="btn btn-primary px-5 py-2">Start Analyzing</a>
+  </div>
+</div>
+
+{% if recent %}
+<h6 class="mb-3 fw-semibold">Recent documents</h6>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr><th>File</th><th>Type</th><th>Summary</th><th>Words</th><th>Date</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for r in recent %}
+        <tr>
+          <td style="font-size:.8rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ r.filename }}</td>
+          <td><span class="badge-type">{{ r.doc_type or 'Unknown' }}</span></td>
+          <td style="font-size:.82rem;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6B7280;">
+            {{ r.summary[:80] if r.summary else '—' }}{% if r.summary and r.summary|length > 80 %}…{% endif %}
+          </td>
+          <td>{{ r.word_count }}</td>
+          <td style="font-size:.78rem;color:#9CA3AF;">{{ r.created_at.strftime('%d %b %H:%M') }}</td>
+          <td><a href="{{ url_for('history.view_result', result_id=r.id) }}" class="btn btn-sm btn-outline-secondary">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
