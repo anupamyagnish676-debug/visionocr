@@ -106,9 +106,8 @@ def analyze_image(pil_img: Image.Image, translate_to: str = '', api_key: str = '
             if 'generateContent' in m.supported_generation_methods
         ]
         print(f'[Gemini] Available: {available}')
-        for candidate in ['gemini-2.0-flash', 'gemini-2.0-flash-lite',
-                          'gemini-1.5-flash', 'gemini-1.5-flash-001',
-                          'gemini-1.5-pro']:
+        for candidate in ['gemini-1.5-flash', 'gemini-1.5-flash-001',
+                          'gemini-1.5-pro', 'gemini-2.0-flash-lite', 'gemini-2.0-flash']:
             if candidate in available:
                 model_name = candidate
                 break
