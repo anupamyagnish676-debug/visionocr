@@ -1,0 +1,235 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard — VisionOCR{% endblock %}
+{% block extra_css %}
+<style>
+  .stat-card{background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:20px;text-align:center;}
+  .stat-num{font-size:2rem;font-weight:700;}
+  .stat-label{font-size:.78rem;color:#9CA3AF;margin-top:4px;}
+  .chart-card{background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:20px;}
+  .chart-title{font-size:.9rem;font-weight:600;margin-bottom:16px;color:#374151;}
+  .no-data{text-align:center;color:#D1D5DB;padding:40px 0;font-size:.85rem;}
+</style>
+{% endblock %}
+{% block content %}
+
+<h4 class="mb-1">Dashboard</h4>
+<p class="text-muted mb-4">Your document analysis statistics and insights</p>
+
+<!-- Stat cards -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-num" style="color:#7C3AED;">{{ total_docs }}</div>
+      <div class="stat-label">Documents analyzed</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-num" style="color:#059669;">{{ total_words }}</div>
+      <div class="stat-label">Total words extracted</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-num" style="color:#D97706;">{{ translated }}</div>
+      <div class="stat-label">Documents translated</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-num" style="color:#DC2626;">{{ total_tokens }}</div>
+      <div class="stat-label">Total tokens used</div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts row -->
+<div class="row g-3 mb-4">
+
+  <!-- Daily activity -->
+  <div class="col-md-6">
+    <div class="chart-card">
+      <div class="chart-title">Daily activity — last 7 days</div>
+      {% if total_docs > 0 %}
+      <canvas id="dailyChart" height="180"></canvas>
+      {% else %}
+      <div class="no-data">No documents yet. Start analyzing!</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Document types -->
+  <div class="col-md-6">
+    <div class="chart-card">
+      <div class="chart-title">Document types breakdown</div>
+      {% if doc_types_labels %}
+      <canvas id="docTypeChart" height="180"></canvas>
+      {% else %}
+      <div class="no-data">No data yet</div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Second charts row -->
+<div class="row g-3 mb-4">
+
+  <!-- Languages -->
+  <div class="col-md-6">
+    <div class="chart-card">
+      <div class="chart-title">Languages translated to</div>
+      {% if lang_labels %}
+      <canvas id="langChart" height="180"></canvas>
+      {% else %}
+      <div class="no-data">No translations yet</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Summary stats -->
+  <div class="col-md-6">
+    <div class="chart-card">
+      <div class="chart-title">Overview</div>
+      <div class="d-flex flex-column gap-3 mt-2">
+        {% set stats = [
+          ('Total characters extracted', total_chars, '#7C3AED'),
+          ('Documents with translation', translated, '#059669'),
+          ('Avg words per document', (total_words // total_docs) if total_docs > 0 else 0, '#D97706'),
+          ('Total API tokens consumed', total_tokens, '#DC2626'),
+        ] %}
+        {% for label, value, color in stats %}
+        <div>
+          <div class="d-flex justify-content-between mb-1">
+            <span style="font-size:.82rem;color:#6B7280;">{{ label }}</span>
+            <span style="font-size:.82rem;font-weight:600;color:{{ color }};">{{ value }}</span>
+          </div>
+          <div style="background:#F3F4F6;border-radius:6px;height:6px;">
+            <div style="background:{{ color }};height:6px;border-radius:6px;width:{{ [value, 100]|min }}%;"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Recent documents -->
+{% if recent %}
+<div class="chart-card">
+  <div class="chart-title">Recent documents</div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr><th>Type</th><th>Words</th><th>Summary</th><th>Date</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for r in recent %}
+        <tr>
+          <td><span style="background:#EDE9FE;color:#5B21B6;border-radius:6px;padding:2px 8px;font-size:.78rem;">
+            {{ r.doc_type or 'Unknown' }}</span></td>
+          <td style="font-size:.82rem;">{{ r.word_count }}</td>
+          <td style="font-size:.8rem;color:#6B7280;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            {{ r.summary[:80] if r.summary else '—' }}</td>
+          <td style="font-size:.78rem;color:#9CA3AF;">{{ r.created_at.strftime('%d %b %H:%M') }}</td>
+          <td><a href="{{ url_for('history.view_result', result_id=r.id) }}"
+                 class="btn btn-sm btn-outline-secondary">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const PURPLE = '#7C3AED';
+const GREEN  = '#059669';
+const AMBER  = '#D97706';
+const BLUE   = '#3B82F6';
+const CORAL  = '#EF4444';
+
+const COLORS = [PURPLE, GREEN, AMBER, BLUE, CORAL, '#8B5CF6', '#EC4899'];
+
+// Daily activity chart
+{% if total_docs > 0 %}
+new Chart(document.getElementById('dailyChart'), {
+  type: 'bar',
+  data: {
+    labels: {{ daily_labels | tojson }},
+    datasets: [{
+      label: 'Documents',
+      data: {{ daily_values | tojson }},
+      backgroundColor: PURPLE + '99',
+      borderColor: PURPLE,
+      borderWidth: 2,
+      borderRadius: 6,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } },
+           grid: { color: '#F3F4F6' } },
+      x: { ticks: { font: { size: 11 } }, grid: { display: false } }
+    }
+  }
+});
+{% endif %}
+
+// Document types chart
+{% if doc_types_labels %}
+new Chart(document.getElementById('docTypeChart'), {
+  type: 'doughnut',
+  data: {
+    labels: {{ doc_types_labels | tojson }},
+    datasets: [{
+      data: {{ doc_types_values | tojson }},
+      backgroundColor: COLORS.slice(0, {{ doc_types_labels | length }}),
+      borderWidth: 2,
+      borderColor: '#fff',
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'right', labels: { font: { size: 11 }, padding: 12 } }
+    }
+  }
+});
+{% endif %}
+
+// Languages chart
+{% if lang_labels %}
+new Chart(document.getElementById('langChart'), {
+  type: 'bar',
+  data: {
+    labels: {{ lang_labels | tojson }},
+    datasets: [{
+      label: 'Translations',
+      data: {{ lang_values | tojson }},
+      backgroundColor: COLORS.slice(0, {{ lang_labels | length }}).map(c => c + '99'),
+      borderColor: COLORS.slice(0, {{ lang_labels | length }}),
+      borderWidth: 2,
+      borderRadius: 6,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } },
+           grid: { color: '#F3F4F6' } },
+      x: { ticks: { font: { size: 11 } }, grid: { display: false } }
+    }
+  }
+});
+{% endif %}
+</script>
+{% endblock %}

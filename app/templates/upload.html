@@ -67,7 +67,9 @@
         </span>
       </button>
       <p class="text-center mt-2 mb-0 text-muted" style="font-size:.75rem;">
-        Uses Vision Language Models (VLMs) · Results saved automatically
+        Uses Vision Language Models (VLMs) · 
+      {% if backend == 'ollama' %}Running locally via Ollama ({{ model }}){% else %}Gemini API (cloud){% endif %} · 
+      Results saved automatically
       </p>
     </div>
   </div>

@@ -1,4 +1,4 @@
-import os, uuid, tempfile
+import os, uuid, tempfile, traceback
 from flask import Blueprint, render_template, request, jsonify, current_app, send_file, Response
 from flask_login import login_required, current_user
 from PIL import Image
@@ -6,14 +6,12 @@ from fpdf import FPDF
 from app.models.database import db, Result
 
 extract_bp = Blueprint('extract', __name__)
-
 ALLOWED = {'png', 'jpg', 'jpeg', 'bmp', 'tiff', 'webp', 'gif'}
 
 def allowed(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED
 
 def safe_text(text):
-    """Convert text to latin-1 safe string for FPDF."""
     if not text:
         return ''
     return text.encode('latin-1', errors='replace').decode('latin-1')
@@ -23,11 +21,9 @@ def safe_text(text):
 def upload_page():
     return render_template('upload.html')
 
-
 @extract_bp.route('/api/analyze', methods=['POST'])
 @login_required
 def analyze():
-    import traceback
     try:
         from utils.vision_engine import analyze_image
 
@@ -51,30 +47,30 @@ def analyze():
         result  = analyze_image(pil_img, translate_to=translate_to, api_key=api_key)
 
         rec = Result(
-            user_id     = current_user.id,
-            filename    = fname,
-            doc_type    = result['doc_type'][:80] if result['doc_type'] else 'Unknown',
-            extracted   = result['extracted'],
-            summary     = result['summary'],
-            translation = result['translation'],
-            translate_to= result['translate_to'],
-            word_count  = result['word_count'],
-            char_count  = result['char_count'],
-            tokens_used = result['tokens_used'],
+            user_id      = current_user.id,
+            filename     = fname,
+            doc_type     = result['doc_type'][:80] if result['doc_type'] else 'Unknown',
+            extracted    = result['extracted'],
+            summary      = result['summary'],
+            translation  = result['translation'],
+            translate_to = result['translate_to'],
+            word_count   = result['word_count'],
+            char_count   = result['char_count'],
+            tokens_used  = result['tokens_used'],
         )
         db.session.add(rec)
         db.session.commit()
 
         return jsonify({
-            'id':          rec.id,
-            'doc_type':    rec.doc_type,
-            'extracted':   rec.extracted,
-            'summary':     rec.summary,
-            'translation': rec.translation,
+            'id':           rec.id,
+            'doc_type':     rec.doc_type,
+            'extracted':    rec.extracted,
+            'summary':      rec.summary,
+            'translation':  rec.translation,
             'translate_to': rec.translate_to,
-            'word_count':  rec.word_count,
-            'char_count':  rec.char_count,
-            'tokens_used': rec.tokens_used,
+            'word_count':   rec.word_count,
+            'char_count':   rec.char_count,
+            'tokens_used':  rec.tokens_used,
         })
 
     except Exception as e:
@@ -94,21 +90,20 @@ def download_pdf(result_id):
     pdf.set_margins(15, 15, 15)
     pdf.set_auto_page_break(auto=True, margin=15)
 
-    # Page 1 — Extracted text
     pdf.add_page()
     pdf.set_font('Helvetica', 'B', 16)
     pdf.cell(0, 10, 'Extracted Text', ln=True, align='C')
     pdf.set_font('Helvetica', '', 9)
     pdf.set_text_color(120, 120, 120)
-    info = safe_text(f'Type: {rec.doc_type}  |  Words: {rec.word_count}  |  Chars: {rec.char_count}')
-    pdf.cell(0, 6, info, ln=True, align='C')
+    pdf.cell(0, 6, safe_text(
+        f'Type: {rec.doc_type}  |  Words: {rec.word_count}  |  Chars: {rec.char_count}'),
+        ln=True, align='C')
     pdf.ln(4)
     pdf.set_font('Helvetica', '', 11)
     pdf.set_text_color(30, 30, 30)
     for line in (rec.extracted or '').split('\n'):
         pdf.multi_cell(0, 7, safe_text(line) if safe_text(line).strip() else ' ')
 
-    # Page 2 — Summary
     if rec.summary:
         pdf.add_page()
         pdf.set_font('Helvetica', 'B', 16)
@@ -118,7 +113,6 @@ def download_pdf(result_id):
         pdf.set_font('Helvetica', '', 11)
         pdf.multi_cell(0, 7, safe_text(rec.summary))
 
-    # Page 3 — Translation
     if rec.translation:
         pdf.add_page()
         pdf.set_font('Helvetica', 'B', 16)
@@ -148,15 +142,3 @@ def download_txt(result_id):
         content += f"TRANSLATION ({rec.translate_to}):\n{rec.translation}\n"
     return Response(content, mimetype='text/plain',
                     headers={'Content-Disposition': f'attachment; filename=document_{result_id}.txt'})
-
-
-@extract_bp.route('/api/models')
-@login_required
-def list_models():
-    try:
-        import google.generativeai as genai
-        genai.configure(api_key=current_app.config.get('GEMINI_API_KEY', ''))
-        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        return '<br>'.join(models)
-    except Exception as e:
-        return str(e)

@@ -5,7 +5,7 @@ from app.models.database import db, User
 
 auth_bp = Blueprint('auth', __name__)
 
-@auth_bp.route('/register', methods=['GET','POST'])
+@auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
         name     = request.form['name'].strip()
@@ -14,7 +14,8 @@ def register():
         if User.query.filter_by(email=email).first():
             flash('Email already registered.', 'danger')
             return redirect(url_for('auth.register'))
-        user = User(name=name, email=email, password=generate_password_hash(password))
+        user = User(name=name, email=email,
+                    password=generate_password_hash(password))
         db.session.add(user)
         db.session.commit()
         login_user(user)
@@ -22,7 +23,7 @@ def register():
         return redirect(url_for('main.home'))
     return render_template('register.html')
 
-@auth_bp.route('/login', methods=['GET','POST'])
+@auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         email    = request.form['email'].strip().lower()

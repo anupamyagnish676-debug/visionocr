@@ -1,23 +1,24 @@
 """
 utils/vision_engine.py
-Supports TWO VLM backends:
-  1. Gemini API  — cloud, free tier, best accuracy (needs API key)
-  2. Ollama      — local, fully offline, no API key needed
-
-To use Ollama:
-  1. Download from https://ollama.com and install
-  2. Run: ollama pull llava
-  3. Set VLM_BACKEND = "ollama" in app/__init__.py
+Uses Google Gemini Vision API.
+Get FREE key at: https://aistudio.google.com/app/apikey
 """
-import base64
-import os
-import io
+import base64, os, io
 from PIL import Image
 
 
-# ─────────────────────────────────────────────
-# Shared helpers
-# ─────────────────────────────────────────────
+def _pil_to_base64(pil_img: Image.Image, max_size: int = 1568) -> str:
+    w, h = pil_img.size
+    if max(w, h) > max_size:
+        scale   = max_size / max(w, h)
+        pil_img = pil_img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+    if pil_img.mode in ('RGBA', 'P'):
+        pil_img = pil_img.convert('RGB')
+    buf = io.BytesIO()
+    pil_img.save(buf, format='JPEG', quality=90)
+    return base64.b64encode(buf.getvalue()).decode('utf-8')
+
+
 def _build_prompt(translate_to: str) -> str:
     translation_block = ''
     if translate_to.strip():
@@ -46,26 +47,6 @@ Write a concise 2-3 sentence summary of what the document is about.
 Label this section exactly as: SUMMARY:
 {translation_block}
 Be thorough. If handwriting is unclear, make your best interpretation and add [unclear] next to uncertain words."""
-
-
-def _pil_to_base64(pil_img: Image.Image, max_size: int = 1568) -> str:
-    w, h = pil_img.size
-    if max(w, h) > max_size:
-        scale   = max_size / max(w, h)
-        pil_img = pil_img.resize((int(w*scale), int(h*scale)), Image.LANCZOS)
-    if pil_img.mode in ('RGBA', 'P'):
-        pil_img = pil_img.convert('RGB')
-    buf = io.BytesIO()
-    pil_img.save(buf, format='JPEG', quality=90)
-    return base64.b64encode(buf.getvalue()).decode('utf-8')
-
-
-def _pil_to_path(pil_img: Image.Image) -> str:
-    """Save PIL image to temp file and return path (for Ollama)."""
-    import tempfile
-    tmp = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
-    pil_img.convert('RGB').save(tmp.name, format='JPEG', quality=90)
-    return tmp.name
 
 
 def _parse_response(raw: str, translate_to: str) -> dict:
@@ -101,48 +82,41 @@ def _parse_response(raw: str, translate_to: str) -> dict:
     }
 
 
-# ─────────────────────────────────────────────
-# Backend 1: Gemini API (cloud)
-# ─────────────────────────────────────────────
-def _analyze_gemini(pil_img: Image.Image, translate_to: str, api_key: str) -> dict:
+def analyze_image(pil_img: Image.Image, translate_to: str = '', api_key: str = '') -> dict:
     try:
         import google.generativeai as genai
     except ImportError:
         raise ImportError("Run: pip install google-generativeai")
 
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY not set in app/__init__.py")
+    key = api_key or os.getenv('GEMINI_API_KEY', '')
+    if not key or key == 'PASTE_YOUR_GEMINI_KEY_HERE':
+        raise ValueError(
+            "Gemini API key not set.\n"
+            "Open app/__init__.py and paste your key on line 13."
+        )
 
-    genai.configure(api_key=api_key)
+    genai.configure(api_key=key)
 
-    # Auto-detect working model from available list
-    model_name = 'gemini-2.0-flash'
+    # Auto-detect working model
+    model_name = 'gemini-1.5-flash'
     try:
         available = [
             m.name.replace('models/', '')
             for m in genai.list_models()
             if 'generateContent' in m.supported_generation_methods
         ]
-        print(f'[Gemini] Available models: {available}')
-        # Try in order of preference
-        for candidate in [
-            'gemini-2.0-flash',
-            'gemini-2.0-flash-lite',
-            'gemini-1.5-flash',
-            'gemini-1.5-flash-001',
-            'gemini-1.5-flash-002',
-            'gemini-1.5-pro',
-            'gemini-1.0-pro-vision',
-        ]:
+        print(f'[Gemini] Available: {available}')
+        for candidate in ['gemini-2.0-flash', 'gemini-2.0-flash-lite',
+                          'gemini-1.5-flash', 'gemini-1.5-flash-001',
+                          'gemini-1.5-pro']:
             if candidate in available:
                 model_name = candidate
                 break
         else:
-            # Use first available vision model as last resort
             vision = [m for m in available if 'flash' in m or 'pro' in m or 'vision' in m]
             if vision:
                 model_name = vision[0]
-        print(f'[Gemini] Using model: {model_name}')
+        print(f'[Gemini] Using: {model_name}')
     except Exception as e:
         print(f'[Gemini] Could not list models: {e}')
 
@@ -153,90 +127,15 @@ def _analyze_gemini(pil_img: Image.Image, translate_to: str, api_key: str) -> di
 
     response = model.generate_content(
         [prompt, img_part],
-        generation_config=genai.GenerationConfig(max_output_tokens=4096, temperature=0.1),
+        generation_config=genai.GenerationConfig(
+            max_output_tokens=4096,
+            temperature=0.1,
+        ),
     )
 
     raw    = response.text
     tokens = response.usage_metadata.total_token_count if hasattr(response, 'usage_metadata') else 0
+
     result = _parse_response(raw, translate_to)
     result['tokens_used'] = tokens
-    result['backend']     = f'Gemini ({model_name})'
     return result
-
-
-# ─────────────────────────────────────────────
-# Backend 2: Ollama (local, offline)
-# ─────────────────────────────────────────────
-def _analyze_ollama(pil_img: Image.Image, translate_to: str, model: str = 'llava') -> dict:
-    """
-    Runs VLM locally using Ollama.
-    Requirements:
-      1. Install Ollama from https://ollama.com
-      2. Run: ollama pull llava   (or llava:13b for better accuracy)
-      3. Ollama must be running (it starts automatically after install)
-    """
-    try:
-        import ollama as ol
-    except ImportError:
-        raise ImportError(
-            "ollama Python package not installed.\n"
-            "Run: pip install ollama\n"
-            "Also install Ollama app from: https://ollama.com"
-        )
-
-    img_path = _pil_to_path(pil_img)
-    prompt   = _build_prompt(translate_to)
-
-    print(f'[Ollama] Running {model} locally...')
-
-    try:
-        response = ol.chat(
-            model=model,
-            messages=[{
-                'role':    'user',
-                'content': prompt,
-                'images':  [img_path],
-            }]
-        )
-        raw = response['message']['content']
-    except Exception as e:
-        raise RuntimeError(
-            f"Ollama error: {e}\n"
-            f"Make sure Ollama is running and model '{model}' is installed.\n"
-            f"Run: ollama pull {model}"
-        )
-    finally:
-        # Clean up temp file
-        try:
-            os.unlink(img_path)
-        except Exception:
-            pass
-
-    result = _parse_response(raw, translate_to)
-    result['tokens_used'] = 0   # Ollama does not report token count
-    result['backend']     = f'Ollama ({model})'
-    return result
-
-
-# ─────────────────────────────────────────────
-# Main entry point
-# ─────────────────────────────────────────────
-def analyze_image(
-    pil_img: Image.Image,
-    translate_to: str = '',
-    api_key: str = '',
-    backend: str = 'gemini',        # 'gemini' or 'ollama'
-    ollama_model: str = 'llava',    # ollama model name
-) -> dict:
-    """
-    Analyze a handwritten image using the selected VLM backend.
-
-    backend='gemini'  → Uses Google Gemini API (needs API key, cloud)
-    backend='ollama'  → Uses Ollama locally (needs Ollama installed, offline)
-    """
-    backend = backend.lower().strip()
-
-    if backend == 'ollama':
-        return _analyze_ollama(pil_img, translate_to, model=ollama_model)
-    else:
-        return _analyze_gemini(pil_img, translate_to, api_key=api_key)
