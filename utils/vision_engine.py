@@ -85,6 +85,7 @@ def _parse_response(raw: str, translate_to: str) -> dict:
 def analyze_image(pil_img: Image.Image, translate_to: str = '', api_key: str = '') -> dict:
     try:
         import google.generativeai as genai
+        from google.api_core.exceptions import ResourceExhausted
     except ImportError:
         raise ImportError("Run: pip install google-generativeai")
 
@@ -97,44 +98,48 @@ def analyze_image(pil_img: Image.Image, translate_to: str = '', api_key: str = '
 
     genai.configure(api_key=key)
 
-    # Auto-detect working model
-    model_name = 'gemini-1.5-flash'
-    try:
-        available = [
-            m.name.replace('models/', '')
-            for m in genai.list_models()
-            if 'generateContent' in m.supported_generation_methods
-        ]
-        print(f'[Gemini] Available: {available}')
-        for candidate in ['gemini-1.5-flash', 'gemini-1.5-flash-001',
-                          'gemini-1.5-pro', 'gemini-2.0-flash-lite', 'gemini-2.0-flash']:
-            if candidate in available:
-                model_name = candidate
-                break
-        else:
-            vision = [m for m in available if 'flash' in m or 'pro' in m or 'vision' in m]
-            if vision:
-                model_name = vision[0]
-        print(f'[Gemini] Using: {model_name}')
-    except Exception as e:
-        print(f'[Gemini] Could not list models: {e}')
+    candidates = [
+        'gemini-2.5-flash',
+        'gemini-flash-latest',
+        'gemini-2.0-flash',
+        'gemini-2.5-pro',
+        'gemini-2.5-flash-lite',
+        'gemini-pro-latest'
+    ]
 
-    model    = genai.GenerativeModel(model_name)
     prompt   = _build_prompt(translate_to)
     b64      = _pil_to_base64(pil_img)
     img_part = {'mime_type': 'image/jpeg', 'data': b64}
+    
+    response = None
+    used_model = None
+    
+    for candidate in candidates:
+        try:
+            model = genai.GenerativeModel(candidate)
+            response = model.generate_content(
+                [prompt, img_part],
+                generation_config=genai.GenerationConfig(max_output_tokens=4096, temperature=0.1)
+            )
+            used_model = candidate
+            print(f'[Gemini] Successfully used: {candidate}')
+            break
+        except ResourceExhausted:
+            print(f'[Gemini] Model {candidate} has 0 limit or quota exceeded. Trying next...')
+            continue
+        except Exception as e:
+            if 'does not exist' in str(e).lower() or 'not found' in str(e).lower() or 'not supported' in str(e).lower():
+                print(f'[Gemini] Model {candidate} unavailable. Trying next...')
+                continue
+            raise e
 
-    response = model.generate_content(
-        [prompt, img_part],
-        generation_config=genai.GenerationConfig(
-            max_output_tokens=4096,
-            temperature=0.1,
-        ),
-    )
+    if not response:
+        raise ValueError("All candidate Google Gemini models exceeded quota limits or are unavailable on your free-tier account. Please upgrade your API plan or wait.")
 
     raw    = response.text
     tokens = response.usage_metadata.total_token_count if hasattr(response, 'usage_metadata') else 0
 
     result = _parse_response(raw, translate_to)
     result['tokens_used'] = tokens
+    result['model'] = used_model
     return result
